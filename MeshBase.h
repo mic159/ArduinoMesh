@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "RF24.h"
+#include "LinkedList.h"
 
 class MeshBase
 {
@@ -12,9 +13,7 @@ public:
 	struct Peer {
 		uint32_t	address;
 		uint16_t	time;
-		Peer*		next;
-		Peer*		prev;
-		Peer(uint32_t address) : address(address), time(0), next(0), prev(0) {}
+		Peer(uint32_t address) : address(address), time(0) {}
 	};
 	
 	void			Begin();
@@ -37,12 +36,16 @@ private:
 	void			HandlePeerDiscovery(void* buff, uint8_t length);
 	void			ChooseAddress();
 	
-	Peer*	first;
-	Peer*	last;
+	LinkedList<Peer>	peers;
 	
 	Peer*			GetPeer(uint32_t address);
-	void			AddPeer(uint32_t address);
-	Peer*			RemovePeer(Peer* peer);
+	
+	struct PeerDiscoveryMessage
+	{
+		uint8_t		version;
+		uint32_t	address;
+		uint16_t	num_peers;
+	};
 
 };
 

@@ -63,13 +63,15 @@ void MeshBase::Update()
 	// Update peers
 	if (millis() - last_peer_check_time > PEER_CHECK_TIME)
 	{
-		Peer* current = first;
+		LinkedList<Peer>::Node* current = peers.first;
 		while(current != NULL)
 		{
-			current->time += 1;
-			if (current->time >= PEER_TIMEOUT)
+			current->item->time += 1;
+			if (current->item->time >= PEER_TIMEOUT)
 			{
-				current = RemovePeer(current);
+				Serial.print("Lost Peer: ");
+				Serial.println(current->item->address, DEC);
+				current = peers.Remove(current);
 			} else {
 				current = current->next;
 			}
@@ -80,18 +82,22 @@ void MeshBase::Update()
 
 void MeshBase::HandlePeerDiscovery(void* buff, uint8_t length)
 {
-	if (length != sizeof(uint32_t))
+	if (length != sizeof(PeerDiscoveryMessage))
 		return;
-	uint32_t from = *(uint32_t*)buff;
+	PeerDiscoveryMessage from = *(PeerDiscoveryMessage*)buff;
 	// Dont know why, but this keeps happening?
-	if (from == 0)
-		return;
+	/*if (from == 0)
+		return;*/
 
-	Peer* peer = GetPeer(from);
+	Peer* peer = GetPeer(from.address);
 	if (peer == NULL)
 	{
 		// Found a new peer
-		AddPeer(from);
+		Serial.print("New Peer: ");
+		Serial.println(from.address, DEC);
+		Peer* p = new Peer(from.address);
+		peers.Add(p);
+		OnNewPeer(p);
 	} else {
 		// Existing peer, reset timer
 		peer->time = 0;
@@ -101,7 +107,11 @@ void MeshBase::HandlePeerDiscovery(void* buff, uint8_t length)
 void MeshBase::SendPeerDiscovery()
 {
 	last_broadcast_time = millis();
-	SendBroadcastMessage(PEER_DISCOVERY, &address, sizeof(address));
+	MeshBase::PeerDiscoveryMessage msg;
+	msg.version = 1;
+	msg.address = address;
+	msg.num_peers = peers.length;
+	SendBroadcastMessage(PEER_DISCOVERY, &msg, sizeof(MeshBase::PeerDiscoveryMessage));
 }
 
 void MeshBase::SendBroadcastMessage(uint32_t to, const void* data, uint8_t length)
@@ -131,53 +141,16 @@ void MeshBase::ChooseAddress()
 	Serial.println(address, DEC);
 }
 
-void MeshBase::AddPeer(uint32_t a)
-{
-	Serial.print("New Peer: ");
-	Serial.println(a, DEC);
-	Peer* n = new Peer(a);
-	if (last == NULL)
-	{
-		// Empty list.
-		first = n;
-		last = n;
-	} else {
-		// Attach onto end
-		last->next = n;
-		n->prev = last;
-		last = n;
-	}
-	OnNewPeer(n);
-}
-
 MeshBase::Peer* MeshBase::GetPeer(uint32_t a)
 {
-	Peer* current = first;
+	LinkedList<Peer>::Node* current = peers.first;
 	while(current != NULL)
 	{
-		if (current->address == a)
-			return current;
+		if (current->item->address == a)
+			return current->item;
 		current = current->next;
 	}
 	// Could not find..
 	return NULL;
-}
-
-MeshBase::Peer* MeshBase::RemovePeer(MeshBase::Peer* p)
-{
-	Serial.print("Lost Peer: ");
-	Serial.println(p->address, DEC);
-	OnLostPeer(p);
-	Peer* next = p->next;
-	if (first == p)
-		first = p->next;
-	if (last == p)
-		last = p->prev;
-	if (p->prev)
-		p->prev->next = p->next;
-	if (p->next)
-		p->next->prev = p->prev;
-	delete p;
-	return next;
 }
 
