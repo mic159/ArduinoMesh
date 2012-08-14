@@ -9,11 +9,18 @@ public:
 protected:
     virtual void	HandleMessage(uint32_t sender, const void* data, uint8_t length)
     {
-        Serial.println("Got Message");
+        Serial.print(sender, DEC);
+        Serial.print(" : ");
+        Serial.println((const char*)data);
     }
     virtual void OnNewPeer(Peer* p)
     {
-        SendMessage(p->address, "Hello", 6);
+        if (!IsReady()) return;
+        char buff[255];
+        int len = snprintf(buff, 255, "Hello %u from %u", p->address, GetAddress());
+        Serial.print("Sending message: ");
+        Serial.println(buff);
+        SendMessage(p->address, buff, len + 1);
     }
 };
 
