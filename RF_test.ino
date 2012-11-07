@@ -7,9 +7,9 @@ class App : public MeshBase
 public:
     App() : MeshBase(9, 10) {}
 protected:
-    virtual void	HandleMessage(uint32_t sender, const void* data, uint8_t length)
+    virtual void	OnMessage(const MeshBase::Message* meta, const void* data, uint8_t length)
     {
-        Serial.print(sender, DEC);
+        Serial.print(meta->address_from, DEC);
         Serial.print(" : ");
         Serial.println((const char*)data);
     }
@@ -20,7 +20,7 @@ protected:
         int len = snprintf(buff, 255, "Hello %u from %u", p->address, GetAddress());
         Serial.print("Sending message: ");
         Serial.println(buff);
-        SendMessage(p->address, buff, len + 1);
+        SendMessage(p->address, type_user, buff, len + 1);
     }
 };
 

@@ -16,13 +16,30 @@ public:
 		Peer(uint32_t address) : address(address), time(0) {}
 	};
 	
+	struct Message
+	{
+		uint8_t		protocol_version;
+		uint8_t		ttl;
+		uint8_t		type;
+		bool		split_enabled :  1;
+		uint8_t		split_part : 7;
+		uint32_t	address_from;
+	};
+
+	// -- Message types --
+	enum message_type {
+		type_peer_discovery,
+		type_peer_list,
+		type_user,
+	};
+
 	void			Begin();
 	void			Update();
-	void			SendMessage(uint32_t address, const void* data, uint8_t length);
+	void			SendMessage(uint32_t address, uint8_t type, const void* data, uint8_t length);
 	uint32_t		GetAddress() const { return address; }
 	bool			IsReady() const { return address != 0; }
 protected:
-	virtual void	HandleMessage(uint32_t sender, const void* data, uint8_t length) = 0;
+	virtual void	OnMessage(const MeshBase::Message* meta, const void* data, uint8_t length) = 0;
 	virtual void	OnNewPeer(Peer*) {}
 	virtual void	OnLostPeer(Peer*) {}
 private:
@@ -32,8 +49,9 @@ private:
 	unsigned long	last_peer_check_time;
 
 	void			SendPeerDiscovery();
-	void			SendBroadcastMessage(uint32_t address, const void* data, uint8_t length);
-	void			HandlePeerDiscovery(void* buff, uint8_t length);
+	void			SendMessage(uint32_t address, uint8_t type, const void* data, uint8_t length, bool is_broadcast);
+	void			HandlePeerDiscovery(const Message* msg, const void* buff, uint8_t length);
+	void			HandleMessage(const Message* msg, const void* data, uint8_t length);
 	void			ChooseAddress();
 	
 	LinkedList<Peer>	peers;
@@ -42,9 +60,11 @@ private:
 	
 	struct PeerDiscoveryMessage
 	{
-		uint8_t		version;
-		uint32_t	address;
-		uint16_t	num_peers;
+		uint8_t		protocol_version;
+		uint8_t		network_capabilities; // What routing/networking can I do for the network
+		uint8_t		application_capabilities; // What type of data do I expose
+		uint16_t	num_peers; // Number of direct peers
+		uint32_t	uptime; // Seconds since boot
 	};
 
 };

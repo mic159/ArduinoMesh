@@ -37,7 +37,7 @@ void MeshBase::Update()
 	// Periodic sends
 	if (millis() - last_broadcast_time > PEER_DISCOVERY_TIME)
 	{
-    		if (!IsReady())
+		if (!IsReady())
 			ChooseAddress();
 		SendPeerDiscovery();
 	}
@@ -51,11 +51,18 @@ void MeshBase::Update()
 			uint8_t len = radio.getDynamicPayloadSize();
 			uint8_t buff[40];
 			done = radio.read(buff, min(len, sizeof(buff)));
-			if (pipe_num == 0)
-			{
-				HandleMessage(0, buff, len);
-			} else if (pipe_num == 1) {
-				HandlePeerDiscovery(buff, len);
+			
+			const MeshBase::Message* msg = (struct MeshBase::Message*)buff;
+			uint8_t payload_length = len - sizeof(Message);
+			const uint8_t* payload = buff + sizeof(Message);
+			
+			switch(msg->type) {
+				case type_peer_discovery:
+					HandlePeerDiscovery(msg, payload, payload_length);
+				break;
+				default:
+					OnMessage(msg, payload, payload_length);
+				break;
 			}
 		} while (!done);
 	}
@@ -80,22 +87,21 @@ void MeshBase::Update()
 	}
 }
 
-void MeshBase::HandlePeerDiscovery(void* buff, uint8_t length)
+void MeshBase::HandlePeerDiscovery(const MeshBase::Message* msg, const void* buff, uint8_t length)
 {
 	if (length != sizeof(PeerDiscoveryMessage))
 		return;
-	PeerDiscoveryMessage from = *(PeerDiscoveryMessage*)buff;
-	// Dont know why, but this keeps happening?
-	/*if (from == 0)
-		return;*/
+	const PeerDiscoveryMessage* pd = (struct PeerDiscoveryMessage*)buff;
+	//if (msg.protocol_version != 1)
+	//	return;
 
-	Peer* peer = GetPeer(from.address);
+	Peer* peer = GetPeer(msg->address_from);
 	if (peer == NULL)
 	{
 		// Found a new peer
 		Serial.print("New Peer: ");
-		Serial.println(from.address, DEC);
-		Peer* p = new Peer(from.address);
+		Serial.println(msg->address_from, DEC);
+		Peer* p = new Peer(msg->address_from);
 		peers.Add(p);
 		OnNewPeer(p);
 	} else {
@@ -107,27 +113,37 @@ void MeshBase::HandlePeerDiscovery(void* buff, uint8_t length)
 void MeshBase::SendPeerDiscovery()
 {
 	last_broadcast_time = millis();
-	MeshBase::PeerDiscoveryMessage msg;
-	msg.version = 1;
-	msg.address = address;
-	msg.num_peers = peers.length;
-	SendBroadcastMessage(PEER_DISCOVERY, &msg, sizeof(MeshBase::PeerDiscoveryMessage));
+	MeshBase::PeerDiscoveryMessage payload;
+	payload.protocol_version = 1;
+	payload.network_capabilities = 0;
+	payload.application_capabilities = 0;
+	payload.num_peers = peers.length;
+	payload.uptime = millis() / 1000;
+	SendMessage(PEER_DISCOVERY, type_peer_discovery, &payload, sizeof(MeshBase::PeerDiscoveryMessage), true);
 }
 
-void MeshBase::SendBroadcastMessage(uint32_t to, const void* data, uint8_t length)
+void MeshBase::SendMessage(uint32_t to, uint8_t type, const void* data, uint8_t length, bool is_broadcast)
 {
+	uint8_t buff[32];
+	Message* msg = (struct Message*)buff;
+	msg->protocol_version = 1;
+	msg->ttl = 0;
+	msg->type = type;
+	msg->address_from = address;
+	msg->split_enabled = 0;
+	msg->split_part = 0;
 	radio.stopListening();
-	radio.openWritingPipe(TO_BROADCAST(to));
+	if (is_broadcast)
+		radio.openWritingPipe(TO_BROADCAST(to));
+	else
+		radio.openWritingPipe(TO_ADDRESS(to));
 	radio.write(data, length);
 	radio.startListening();
 }
 
-void MeshBase::SendMessage(uint32_t to, const void* data, uint8_t length)
+void MeshBase::SendMessage(uint32_t to, uint8_t type, const void* data, uint8_t length)
 {
-	radio.stopListening();
-	radio.openWritingPipe(TO_ADDRESS(to));
-	radio.write(data, length);
-	radio.startListening();
+	SendMessage(to, type_user, data, length, false);
 }
 
 void MeshBase::ChooseAddress()
