@@ -92,15 +92,19 @@ void MeshBase::HandlePeerDiscovery(const MeshBase::Message* msg, const void* buf
 	if (length != sizeof(PeerDiscoveryMessage))
 		return;
 	const PeerDiscoveryMessage* pd = (struct PeerDiscoveryMessage*)buff;
-	//if (msg.protocol_version != 1)
-	//	return;
+	if (pd->protocol_version != 1)
+		return;
 
 	Peer* peer = GetPeer(msg->address_from);
 	if (peer == NULL)
 	{
 		// Found a new peer
-		Serial.print("New Peer: ");
-		Serial.println(msg->address_from, DEC);
+		Serial.print("New Peer. Address=");
+		Serial.print(msg->address_from, DEC);
+		Serial.print(" uptime=");
+		Serial.print(pd->uptime, DEC);
+		Serial.print(" num_peers=");
+		Serial.println(pd->num_peers, DEC);
 		Peer* p = new Peer(msg->address_from);
 		peers.Add(p);
 		OnNewPeer(p);
@@ -119,7 +123,7 @@ void MeshBase::SendPeerDiscovery()
 	payload.application_capabilities = 0;
 	payload.num_peers = peers.length;
 	payload.uptime = millis() / 1000;
-	SendMessage(PEER_DISCOVERY, type_peer_discovery, &payload, sizeof(MeshBase::PeerDiscoveryMessage), true);
+	SendMessage(PEER_DISCOVERY, type_peer_discovery, &payload, sizeof(payload), true);
 }
 
 void MeshBase::SendMessage(uint32_t to, uint8_t type, const void* data, uint8_t length, bool is_broadcast)
@@ -132,12 +136,13 @@ void MeshBase::SendMessage(uint32_t to, uint8_t type, const void* data, uint8_t 
 	msg->address_from = address;
 	msg->split_enabled = 0;
 	msg->split_part = 0;
+	memcpy(&buff[sizeof(Message)], data, min(length, 32 - sizeof(Message)));
 	radio.stopListening();
 	if (is_broadcast)
 		radio.openWritingPipe(TO_BROADCAST(to));
 	else
 		radio.openWritingPipe(TO_ADDRESS(to));
-	radio.write(data, length);
+	radio.write(buff, length + sizeof(Message));
 	radio.startListening();
 }
 
