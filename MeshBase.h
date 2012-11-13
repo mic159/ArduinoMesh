@@ -5,6 +5,8 @@
 #include "RF24.h"
 #include "LinkedList.h"
 
+#define PACKED __attribute__ ((packed))
+
 class MeshBase
 {
 public:
@@ -24,7 +26,7 @@ public:
 		bool		split_enabled :  1;
 		uint8_t		split_part : 7;
 		uint32_t	address_from;
-	};
+	} PACKED;
 
 	// -- Message types --
 	enum message_type {
@@ -65,7 +67,7 @@ private:
 		uint8_t		application_capabilities; // What type of data do I expose
 		uint16_t	num_peers; // Number of direct peers
 		uint32_t	uptime; // Seconds since boot
-	};
+	} PACKED;
 
 };
 
