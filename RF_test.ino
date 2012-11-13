@@ -17,8 +17,8 @@ protected:
     {
         if (!IsReady()) return;
         char buff[255];
-        int len = snprintf(buff, 255, "Hello %u from %u", p->address, GetAddress());
-        Serial.print("Sending message: ");
+        int len = snprintf(buff, 255, "Hello %u", p->address);
+        Serial.print("Me : ");
         Serial.println(buff);
         SendMessage(p->address, type_user, buff, len + 1);
     }

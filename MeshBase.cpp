@@ -2,6 +2,9 @@
 #include <RF24.h>
 #include "MeshBase.h"
 
+#define MAX_PACKET_SIZE 32
+#define MAX_PAYLOAD_SIZE (MAX_PACKET_SIZE - sizeof(Message))
+
 // -- Broadcast addresses --
 #define PEER_DISCOVERY 1
 
@@ -51,19 +54,7 @@ void MeshBase::Update()
 			uint8_t len = radio.getDynamicPayloadSize();
 			uint8_t buff[40];
 			done = radio.read(buff, min(len, sizeof(buff)));
-			
-			const MeshBase::Message* msg = (struct MeshBase::Message*)buff;
-			uint8_t payload_length = len - sizeof(Message);
-			const uint8_t* payload = buff + sizeof(Message);
-			
-			switch(msg->type) {
-				case type_peer_discovery:
-					HandlePeerDiscovery(msg, payload, payload_length);
-				break;
-				default:
-					OnMessage(msg, payload, payload_length);
-				break;
-			}
+			HandlePacket(buff, len);
 		} while (!done);
 	}
 	
@@ -84,6 +75,29 @@ void MeshBase::Update()
 			}
 		}
 		last_peer_check_time = millis();
+	}
+}
+
+void MeshBase::HandlePacket(const byte* data, uint8_t len)
+{
+	if (len < sizeof(Message))
+		return;
+	const MeshBase::Message* msg = (struct MeshBase::Message*)data;
+	uint8_t payload_length = len - sizeof(Message);
+	const byte* payload = data + sizeof(Message);
+	if (msg->split_enabled)
+	{
+		// Re-assembly needed
+		// TODO: Re-assemble packets
+	} else {
+		switch(msg->type) {
+			case type_peer_discovery:
+				HandlePeerDiscovery(msg, payload, payload_length);
+			break;
+			default:
+				OnMessage(msg, payload, payload_length);
+			break;
+		}
 	}
 }
 
@@ -128,27 +142,34 @@ void MeshBase::SendPeerDiscovery()
 
 void MeshBase::SendMessage(uint32_t to, uint8_t type, const void* data, uint8_t length, bool is_broadcast)
 {
-	uint8_t buff[32];
+	byte buff[MAX_PACKET_SIZE];
 	Message* msg = (struct Message*)buff;
 	msg->protocol_version = 1;
 	msg->ttl = 0;
 	msg->type = type;
 	msg->address_from = address;
-	msg->split_enabled = 0;
-	msg->split_part = 0;
-	memcpy(&buff[sizeof(Message)], data, min(length, 32 - sizeof(Message)));
-	radio.stopListening();
-	if (is_broadcast)
-		radio.openWritingPipe(TO_BROADCAST(to));
-	else
-		radio.openWritingPipe(TO_ADDRESS(to));
-	radio.write(buff, length + sizeof(Message));
-	radio.startListening();
+	msg->split_enabled = length > MAX_PAYLOAD_SIZE;
+
+	uint8_t num_pkts = (length / MAX_PAYLOAD_SIZE) + 1;
+	for (uint8_t num = 0; num < num_pkts; ++num)
+	{
+		uint8_t remaining_length = length - (num * MAX_PAYLOAD_SIZE);
+		msg->split_part = num;
+		memcpy(buff + sizeof(Message), (const byte*)data + (num * MAX_PAYLOAD_SIZE), min(remaining_length, MAX_PAYLOAD_SIZE));
+
+		radio.stopListening();
+		if (is_broadcast)
+			radio.openWritingPipe(TO_BROADCAST(to));
+		else
+			radio.openWritingPipe(TO_ADDRESS(to));
+		radio.write(buff, min(remaining_length, MAX_PAYLOAD_SIZE));
+		radio.startListening();
+	}
 }
 
 void MeshBase::SendMessage(uint32_t to, uint8_t type, const void* data, uint8_t length)
 {
-	SendMessage(to, type_user, data, length, false);
+	SendMessage(to, type, data, length, false);
 }
 
 void MeshBase::ChooseAddress()

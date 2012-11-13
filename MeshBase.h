@@ -53,7 +53,7 @@ private:
 	void			SendPeerDiscovery();
 	void			SendMessage(uint32_t address, uint8_t type, const void* data, uint8_t length, bool is_broadcast);
 	void			HandlePeerDiscovery(const Message* msg, const void* buff, uint8_t length);
-	void			HandleMessage(const Message* msg, const void* data, uint8_t length);
+	void			HandlePacket(const byte* data, uint8_t length);
 	void			ChooseAddress();
 	
 	LinkedList<Peer>	peers;
