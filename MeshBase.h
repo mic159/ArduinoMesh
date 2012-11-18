@@ -20,11 +20,12 @@ public:
 	
 	struct Message
 	{
-		uint8_t		protocol_version;
-		uint8_t		ttl;
-		uint8_t		type;
-		bool		split_enabled :  1;
+		uint8_t		protocol_version : 4;
+		uint8_t		ttl : 4;
+		uint8_t		msg_id;
+		bool		split_more : 1;
 		uint8_t		split_part : 7;
+		uint8_t		type;
 		uint32_t	address_from;
 	} PACKED;
 

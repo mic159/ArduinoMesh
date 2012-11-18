@@ -52,8 +52,8 @@ void MeshBase::Update()
 		bool done = false;
 		do {
 			uint8_t len = radio.getDynamicPayloadSize();
-			uint8_t buff[40];
-			done = radio.read(buff, min(len, sizeof(buff)));
+			byte buff[MAX_PAYLOAD_SIZE];
+			done = radio.read(buff, len);
 			HandlePacket(buff, len);
 		} while (!done);
 	}
@@ -85,7 +85,7 @@ void MeshBase::HandlePacket(const byte* data, uint8_t len)
 	const MeshBase::Message* msg = (struct MeshBase::Message*)data;
 	uint8_t payload_length = len - sizeof(Message);
 	const byte* payload = data + sizeof(Message);
-	if (msg->split_enabled)
+	if (msg->split_more || msg->split_part != 0)
 	{
 		// Re-assembly needed
 		// TODO: Re-assemble packets
@@ -98,6 +98,7 @@ void MeshBase::HandlePacket(const byte* data, uint8_t len)
 				OnMessage(msg, payload, payload_length);
 			break;
 		}
+		delete data;
 	}
 }
 
@@ -148,13 +149,13 @@ void MeshBase::SendMessage(uint32_t to, uint8_t type, const void* data, uint8_t 
 	msg->ttl = 0;
 	msg->type = type;
 	msg->address_from = address;
-	msg->split_enabled = length > MAX_PAYLOAD_SIZE;
 
 	uint8_t num_pkts = (length / MAX_PAYLOAD_SIZE) + 1;
 	for (uint8_t num = 0; num < num_pkts; ++num)
 	{
 		uint8_t remaining_length = length - (num * MAX_PAYLOAD_SIZE);
 		msg->split_part = num;
+		msg->split_more = remaining_length > MAX_PAYLOAD_SIZE;
 		memcpy(buff + sizeof(Message), (const byte*)data + (num * MAX_PAYLOAD_SIZE), min(remaining_length, MAX_PAYLOAD_SIZE));
 
 		radio.stopListening();
