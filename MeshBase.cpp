@@ -225,7 +225,7 @@ void MeshBase::SendMessage(uint32_t to, uint8_t type, const void* data, uint8_t 
 			radio.openWritingPipe(TO_BROADCAST(to));
 		else
 			radio.openWritingPipe(TO_ADDRESS(to));
-		radio.write(buff, min(remaining_length + sizeof(MessageHeader), MAX_PAYLOAD_SIZE));
+		radio.write(buff, min(remaining_length + sizeof(MessageHeader), MAX_PACKET_SIZE));
 		radio.startListening();
 		Serial.print(" T Sending pkt split_part=");
 		Serial.print(msg->split_part);
