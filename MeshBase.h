@@ -18,8 +18,7 @@ public:
 		Peer(uint32_t address) : address(address), time(0) {}
 	};
 
-	struct MessageHeader
-	{
+	struct MessageHeader {
 		uint8_t		protocol_version : 4;
 		uint8_t		ttl : 4;
 		uint8_t		msg_id;
@@ -53,6 +52,7 @@ public:
 	void			Begin();
 	void			Update();
 	void			SendMessage(uint32_t address, uint8_t type, const void* data, uint8_t length);
+	void			SendMessage(uint32_t address, uint8_t type, const void* data, uint8_t length, bool is_broadcast);
 	uint32_t		GetAddress() const { return address; }
 	bool			IsReady() const { return address != 0; }
 protected:
@@ -66,7 +66,6 @@ private:
 	unsigned long	last_peer_check_time;
 
 	void			SendPeerDiscovery();
-	void			SendMessage(uint32_t address, uint8_t type, const void* data, uint8_t length, bool is_broadcast);
 	void			HandlePeerDiscovery(const MessageHeader* msg, const void* buff, uint8_t length);
 	void			HandlePacket(const byte* data, uint8_t length);
 	void			ChooseAddress();

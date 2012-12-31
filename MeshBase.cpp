@@ -27,7 +27,7 @@ void MeshBase::Begin()
 {
 	radio.begin();
 	radio.enableDynamicPayloads();
-	radio.setRetries(2,1);
+	radio.setRetries(4,2);
 	radio.openReadingPipe(1, TO_BROADCAST(PEER_DISCOVERY));
 	radio.setAutoAck(0, true);
 	radio.setAutoAck(1, false);
@@ -145,6 +145,9 @@ void MeshBase::HandlePacket(const byte* data, uint8_t len)
 	const MeshBase::MessageHeader* header = (struct MeshBase::MessageHeader*)data;
 	uint8_t payload_length = len - sizeof(MessageHeader);
 	const byte* payload = data + sizeof(MessageHeader);
+	if (header->protocol_version != 1)
+		return;
+
 	Message* s = assembly_list.Find<const MessageHeader*>(header, &FindStream);
 	if (s == NULL) {
 		s = new Message(*header);
@@ -221,20 +224,29 @@ void MeshBase::SendMessage(uint32_t to, uint8_t type, const void* data, uint8_t 
 		msg->split_part = num;
 		msg->split_more = remaining_length > MAX_PAYLOAD_SIZE;
 		memcpy(buff + sizeof(MessageHeader), (const byte*)data + (num * MAX_PAYLOAD_SIZE), min(remaining_length, MAX_PAYLOAD_SIZE));
+		uint8_t wire_size = min(remaining_length + sizeof(MessageHeader), MAX_PACKET_SIZE);
 
 		radio.stopListening();
+		bool result = true;
 		if (is_broadcast)
 			radio.openWritingPipe(TO_BROADCAST(to));
 		else
 			radio.openWritingPipe(TO_ADDRESS(to));
-		radio.write(buff, min(remaining_length + sizeof(MessageHeader), MAX_PACKET_SIZE));
+		if (is_broadcast) {
+			//radio.startWrite(buff, wire_size);
+			result = radio.write(buff, wire_size);
+		} else {
+			result = radio.write(buff, wire_size);
+		}
 		radio.startListening();
-		Serial.print(" T Sending pkt split_part=");
-		Serial.print(msg->split_part);
-		Serial.print(" split_more=");
-		Serial.print(msg->split_more);
-		Serial.print(" length=");
-		Serial.println(min(remaining_length, MAX_PAYLOAD_SIZE));
+		if (!is_broadcast)
+		{
+			Serial.print(" T Sending pkt split_part=");
+			Serial.print(msg->split_part);
+			Serial.print(" result=");
+			Serial.println(result);
+		}
+		delay(100);
 	}
 }
 
