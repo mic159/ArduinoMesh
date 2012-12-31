@@ -124,10 +124,13 @@ bool MeshBase::Message::IsDone() const
 	Serial.print(" split_part=");
 	Serial.print(header.split_part);
 	Serial.print(" blocks_recieved=");
-	Serial.println(blocks_recieved);
-	if (!header.split_more && blocks_recieved >= header.split_part)
+	Serial.print(blocks_recieved);
+	if (!header.split_more && blocks_recieved > header.split_part)
+	{
+		Serial.println(" - True **");
 		return true;
-	Serial.println(" R IsDone() : False");
+	}
+	Serial.println(" - False");
 	return false;
 }
 
@@ -149,7 +152,6 @@ void MeshBase::HandlePacket(const byte* data, uint8_t len)
 	}
 	s->AddPart(payload, payload_length, header->split_part, header->split_more);
 	if (s->IsDone()) {
-		Serial.println(" R IsDone() : true!!");
 		switch(header->type) {
 			case type_peer_discovery:
 				HandlePeerDiscovery(&(s->header), s->data, s->data_used);
