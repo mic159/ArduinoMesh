@@ -12,9 +12,9 @@
 #define TO_BROADCAST(x) (0xBB00000000LL + x)
 #define TO_ADDRESS(x) (0xAA00000000LL + x)
 
-#define PEER_DISCOVERY_TIME 3000
+#define PEER_DISCOVERY_TIME 4000
 #define PEER_CHECK_TIME 4000
-#define PEER_TIMEOUT 2
+#define PEER_TIMEOUT 3
 
 MeshBase::MeshBase(uint8_t ce, uint8_t cs)
 : radio(ce, cs)
@@ -89,16 +89,6 @@ void MeshBase::Message::AddPart(const void* payload, uint8_t len, uint8_t part_n
 {
 	uint8_t start_pos = part_num * MAX_PAYLOAD_SIZE;
 	uint8_t end_pos = len + (part_num * MAX_PAYLOAD_SIZE);
-	Serial.print(" R AddPart() : Adding part. start_pos=");
-	Serial.print(start_pos);
-	Serial.print(" end_pos=");
-	Serial.print(end_pos);
-	Serial.print(" len=");
-	Serial.print(len);
-	Serial.print(" part_num=");
-	Serial.print(part_num);
-	Serial.print(" more_parts=");
-	Serial.println(more_parts);
 	if (data == NULL)
 		data = malloc(end_pos);
 	if (end_pos > data_used)
@@ -119,17 +109,16 @@ bool MeshBase::Message::IsDone() const
 	// in the stream, and split_part to total number of blocks in the stream.
 	// So if split_more is false, and we have the right number of blocks_recieved
 	// we are good to go.
-	Serial.print(" R IsDone() : split_more=");
-	Serial.print(header.split_more);
-	Serial.print(" split_part=");
-	Serial.print(header.split_part);
-	Serial.print(" blocks_recieved=");
-	Serial.print(blocks_recieved);
-	if (!header.split_more && blocks_recieved > header.split_part)
-	{
-		Serial.println(" - True **");
+	if (!header.split_more && blocks_recieved > header.split_part) {
+		if (blocks_recieved > 1) {
+			Serial.print(" R IsDone() : id=");
+			Serial.print(header.msg_id);
+			Serial.println(" - True **");
+		}
 		return true;
 	}
+	Serial.print(" R IsDone() : id=");
+	Serial.print(header.msg_id);
 	Serial.println(" - False");
 	return false;
 }
@@ -237,16 +226,21 @@ void MeshBase::SendMessage(uint32_t to, uint8_t type, const void* data, uint8_t 
 			result = radio.write(buff, wire_size);
 		} else {
 			result = radio.write(buff, wire_size);
-		}
-		radio.startListening();
-		if (!is_broadcast)
-		{
+			if (result == false) {
+				// Issue transmitting packet, retry?
+				radio.startListening();
+				delay(100);
+				radio.stopListening();
+				result = radio.write(buff, wire_size);
+			}
 			Serial.print(" T Sending pkt split_part=");
 			Serial.print(msg->split_part);
+			Serial.print(" id=");
+			Serial.print(msg->msg_id);
 			Serial.print(" result=");
 			Serial.println(result);
 		}
-		delay(100);
+		radio.startListening();
 	}
 }
 
