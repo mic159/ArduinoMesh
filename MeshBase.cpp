@@ -13,14 +13,16 @@
 #define TO_ADDRESS(x) (0xAA00000000LL + x)
 
 #define PEER_DISCOVERY_TIME 4000
-#define PEER_CHECK_TIME 4000
+#define CHECK_TIME 4000
 #define PEER_TIMEOUT 3
+#define ASSEMBLY_TIMEOUT 2
 
 MeshBase::MeshBase(uint8_t ce, uint8_t cs)
 : radio(ce, cs)
 , address(0)
 , last_broadcast_time(0)
-, last_peer_check_time(0)
+, last_check_time(0)
+, application_capabilities(0)
 {}
 
 void MeshBase::Begin()
@@ -56,23 +58,47 @@ void MeshBase::Update()
 		} while (!done);
 	}
 	
-	// Update peers
-	if (millis() - last_peer_check_time > PEER_CHECK_TIME)
+	// Do periodic checks
+	if (millis() - last_check_time > CHECK_TIME)
 	{
-		LinkedList<Peer>::Node* current = peers.first;
-		while(current != NULL)
+		// Check for expired peers
 		{
-			current->item->time += 1;
-			if (current->item->time >= PEER_TIMEOUT)
+			LinkedList<Peer>::Node* current = peers.first;
+			while(current != NULL)
 			{
-				Serial.print("Lost Peer: ");
-				Serial.println(current->item->address, DEC);
-				current = peers.Remove(current);
-			} else {
-				current = current->next;
+				current->item->time += 1;
+				if (current->item->time >= PEER_TIMEOUT)
+				{
+					Serial.print("Lost Peer: ");
+					Serial.println(current->item->address, DEC);
+					current = peers.Remove(current);
+				} else {
+					current = current->next;
+				}
 			}
 		}
-		last_peer_check_time = millis();
+
+		// Check for expired packets
+		{
+			Message* current = assembly_list.first;
+			while(current != NULL)
+			{
+				current->age += 1;
+				if (current->age >= ASSEMBLY_TIMEOUT)
+				{
+					Serial.print("Dropped partial message. address=");
+					Serial.print(current->header.address_from, DEC);
+					Serial.print(" msg_id=");
+					Serial.print(current->header.msg_id);
+					Serial.print(" blocks_recieved=");
+					Serial.println(current->blocks_recieved);
+					current = assembly_list.Remove(current);
+				} else {
+					current = current->next;
+				}
+			}
+		}
+		last_check_time = millis();
 	}
 }
 
@@ -101,6 +127,7 @@ void MeshBase::Message::AddPart(const void* payload, uint8_t len, uint8_t part_n
 		header.split_more = false;
 		header.split_part = part_num;
 	}
+	age = 0;
 }
 
 bool MeshBase::Message::IsDone() const
@@ -110,16 +137,8 @@ bool MeshBase::Message::IsDone() const
 	// So if split_more is false, and we have the right number of blocks_recieved
 	// we are good to go.
 	if (!header.split_more && blocks_recieved > header.split_part) {
-		if (blocks_recieved > 1) {
-			Serial.print(" R IsDone() : id=");
-			Serial.print(header.msg_id);
-			Serial.println(" - True **");
-		}
 		return true;
 	}
-	Serial.print(" R IsDone() : id=");
-	Serial.print(header.msg_id);
-	Serial.println(" - False");
 	return false;
 }
 
@@ -175,11 +194,12 @@ void MeshBase::HandlePeerDiscovery(const MeshBase::MessageHeader* msg, const voi
 		Serial.print(" num_peers=");
 		Serial.println(pd->num_peers, DEC);
 		Peer* p = new Peer(msg->address_from);
+		p->Update(pd);
 		peers.Add(p);
 		OnNewPeer(p);
 	} else {
 		// Existing peer, reset timer
-		peer->time = 0;
+		peer->Update(pd);
 	}
 }
 
@@ -189,7 +209,7 @@ void MeshBase::SendPeerDiscovery()
 	MeshBase::PeerDiscoveryMessage payload;
 	payload.protocol_version = 1;
 	payload.network_capabilities = 0;
-	payload.application_capabilities = 0;
+	payload.application_capabilities = application_capabilities;
 	payload.num_peers = peers.length;
 	payload.uptime = millis() / 1000;
 	SendMessage(PEER_DISCOVERY, type_peer_discovery, &payload, sizeof(payload), true);
@@ -271,5 +291,11 @@ MeshBase::Peer* MeshBase::GetPeer(uint32_t a)
 	}
 	// Could not find..
 	return NULL;
+}
+
+void MeshBase::Peer::Update(const PeerDiscoveryMessage* msg)
+{
+	application_capabilities = msg->application_capabilities;
+	time = 0;
 }
 
